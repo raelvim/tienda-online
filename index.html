@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mi Tienda Online</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <header class="encabezado">
+      <div class="encabezado__marca">🛍️ Mi Tienda</div>
+
+      <div class="encabezado__buscar">
+        <input
+          type="search"
+          id="input-buscar"
+          placeholder="Buscar productos..."
+        />
+      </div>
+
+      <div class="encabezado__acciones">
+        <button class="boton-icono" id="btn-abrir-favoritos" title="Favoritos">
+          <span aria-hidden="true">❤️</span>
+          <span class="boton-icono__texto">Favoritos</span>
+          <span class="contador" id="contador-favoritos">0</span>
+        </button>
+        <button class="boton-icono" id="btn-abrir-carrito" title="Carrito">
+          <span aria-hidden="true">🛒</span>
+          <span class="boton-icono__texto">Carrito</span>
+          <span class="contador" id="contador-carrito">0</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero__contenido">
+        <h1 class="hero__titulo">Productos hechos con dedicación</h1>
+        <p class="hero__subtitulo">
+          Explora el catálogo, guarda tus favoritos ❤️ y arma tu pedido a tu
+          medida.
+        </p>
+      </div>
+    </section>
+
+    <main class="contenedor">
+      <div class="pestanas">
+        <button class="pestana pestana--activa" data-vista="tienda">
+          Todos los productos
+        </button>
+        <button class="pestana" data-vista="favoritos">Mis favoritos</button>
+      </div>
+
+      <h2 class="titulo-seccion" id="titulo-vista">Catálogo</h2>
+      <div class="grid-productos" id="grid-productos"></div>
+    </main>
+
+    <!-- Panel lateral: Carrito -->
+    <div class="fondo-oscuro" id="fondo-oscuro"></div>
+    <aside class="panel-lateral" id="panel-carrito">
+      <div class="panel-lateral__cabecera">
+        <strong>Tu carrito</strong>
+        <button class="panel-lateral__cerrar" id="btn-cerrar-carrito">✕</button>
+      </div>
+      <div class="panel-lateral__cuerpo" id="lista-carrito"></div>
+      <div class="panel-lateral__pie">
+        <div class="entrega-opciones">
+          <span class="entrega-opciones__titulo">Forma de entrega</span>
+          <label class="opcion-entrega">
+            <input
+              type="radio"
+              name="forma-entrega"
+              id="entrega-domicilio"
+              value="domicilio"
+              checked
+            />
+            🚚 Envío a domicilio
+          </label>
+          <div class="campo campo-direccion" id="campo-direccion-envio">
+            <input
+              type="text"
+              id="input-direccion-envio"
+              placeholder="Dirección: calle, número, colonia, ciudad..."
+            />
+          </div>
+          <label class="opcion-entrega">
+            <input
+              type="radio"
+              name="forma-entrega"
+              id="entrega-retiro"
+              value="retiro"
+            />
+            🏬 Retirar en el local
+          </label>
+          <p
+            class="direccion-local"
+            id="texto-direccion-local"
+            style="display: none"
+          ></p>
+        </div>
+        <div class="fila-resumen">
+          <span>Subtotal</span>
+          <span id="resumen-subtotal">$0</span>
+        </div>
+        <div class="fila-resumen">
+          <span>Envío</span>
+          <span id="resumen-envio">$0</span>
+        </div>
+        <div class="fila-resumen fila-resumen--total">
+          <span>Total</span>
+          <span id="resumen-total">$0</span>
+        </div>
+        <button class="boton boton--primario boton--bloque" id="btn-finalizar">
+          Finalizar compra
+        </button>
+      </div>
+    </aside>
+
+    <script src="js/data.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/store.js"></script>
+  </body>
+</html>

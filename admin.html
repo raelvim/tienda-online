@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Panel de Administración - Mi Tienda</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <!-- Pantalla de acceso -->
+    <div class="admin-login" id="vista-login">
+      <h2>🔒 Acceso administrador</h2>
+      <p style="color: var(--color-texto-suave); font-size: 0.85rem">
+        Contraseña por defecto: <code>admin123</code>
+      </p>
+      <input type="password" id="input-password" placeholder="Contraseña" />
+      <button class="boton boton--primario boton--bloque" id="btn-entrar">
+        Entrar
+      </button>
+      <p
+        id="mensaje-login"
+        style="color: var(--color-error); font-size: 0.85rem"
+      ></p>
+    </div>
+
+    <!-- Panel principal (oculto hasta iniciar sesión) -->
+    <div id="vista-panel" style="display: none">
+      <header class="encabezado">
+        <div class="encabezado__marca">⚙️ Panel de administración</div>
+        <div class="encabezado__acciones">
+          <a class="boton-icono" href="index.html" style="text-decoration: none"
+            >🛍️ Ver tienda</a
+          >
+          <button class="boton-icono" id="btn-cerrar-sesion">
+            Cerrar sesión
+          </button>
+        </div>
+      </header>
+
+      <main class="contenedor">
+        <div class="tarjetas-estadisticas">
+          <div class="tarjeta-stat">
+            <div class="tarjeta-stat__valor" id="stat-total-productos">0</div>
+            <div class="tarjeta-stat__etiqueta">Productos publicados</div>
+          </div>
+          <div class="tarjeta-stat">
+            <div class="tarjeta-stat__valor" id="stat-valor-catalogo">$0</div>
+            <div class="tarjeta-stat__etiqueta">Valor total del catálogo</div>
+          </div>
+          <div class="tarjeta-stat">
+            <div class="tarjeta-stat__valor" id="stat-favoritos">0</div>
+            <div class="tarjeta-stat__etiqueta">
+              Productos marcados como favoritos
+            </div>
+          </div>
+          <div class="tarjeta-stat">
+            <div class="tarjeta-stat__valor" id="stat-carrito">0</div>
+            <div class="tarjeta-stat__etiqueta">
+              Unidades en carritos activos
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-admin">
+          <!-- Columna izquierda: formularios -->
+          <div>
+            <div class="tarjeta">
+              <h3 id="titulo-form-producto">Agregar producto</h3>
+              <form id="form-producto">
+                <input type="hidden" id="producto-id" />
+                <div class="campo">
+                  <label>Nombre</label>
+                  <input type="text" id="producto-nombre" required />
+                </div>
+                <div class="campo">
+                  <label>Descripción</label>
+                  <textarea id="producto-descripcion" required></textarea>
+                </div>
+                <div class="campo">
+                  <label>Precio</label>
+                  <input
+                    type="number"
+                    id="producto-precio"
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                </div>
+                <div class="campo">
+                  <label>Forma de envío (informativa)</label>
+                  <select id="producto-forma-envio">
+                    <option>Envío estándar</option>
+                    <option>Envío express</option>
+                    <option>Retiro en tienda</option>
+                  </select>
+                </div>
+                <div class="campo">
+                  <label>Imagen</label>
+                  <input type="file" id="producto-imagen" accept="image/*" />
+                  <img id="preview-imagen" class="previsualizacion" />
+                </div>
+                <button
+                  type="submit"
+                  class="boton boton--primario boton--bloque"
+                >
+                  Guardar producto
+                </button>
+                <button
+                  type="button"
+                  class="boton boton--fantasma boton--bloque"
+                  id="btn-cancelar-edicion"
+                  style="display: none; margin-top: 0.5rem"
+                >
+                  Cancelar edición
+                </button>
+              </form>
+            </div>
+
+            <div class="tarjeta">
+              <h3>Costo de envío según cantidad</h3>
+              <p style="font-size: 0.82rem; color: var(--color-texto-suave)">
+                Define cuánto se cobra de envío según el total de unidades en el
+                carrito. Ejemplo: "desde 1 unidad = $100", "desde 5 unidades =
+                $70".
+              </p>
+              <div id="lista-tramos"></div>
+              <button
+                type="button"
+                class="boton boton--fantasma"
+                id="btn-agregar-tramo"
+              >
+                + Agregar tramo
+              </button>
+              <div class="campo" style="margin-top: 0.8rem">
+                <label>Dirección para retiro en el local</label>
+                <input
+                  type="text"
+                  id="direccion-local"
+                  placeholder="Ej: Av. Siempre Viva 123, Local 4"
+                />
+              </div>
+              <button
+                type="button"
+                class="boton boton--primario boton--bloque"
+                id="btn-guardar-envio"
+                style="margin-top: 0.8rem"
+              >
+                Guardar configuración de envío
+              </button>
+            </div>
+
+            <div class="tarjeta">
+              <h3>Moneda</h3>
+              <p style="font-size: 0.82rem; color: var(--color-texto-suave)">
+                Elegí la moneda con la que se muestran los precios en toda la
+                tienda.
+              </p>
+              <div class="campo">
+                <label>Moneda</label>
+                <select id="moneda-preset"></select>
+              </div>
+              <div
+                class="campo"
+                id="campo-moneda-simbolo"
+                style="display: none"
+              >
+                <label>Símbolo personalizado</label>
+                <input
+                  type="text"
+                  id="moneda-simbolo-custom"
+                  maxlength="4"
+                  placeholder="Ej: Bs, S/, ₡"
+                />
+              </div>
+              <button
+                type="button"
+                class="boton boton--primario boton--bloque"
+                id="btn-guardar-moneda"
+              >
+                Guardar moneda
+              </button>
+            </div>
+
+            <div class="tarjeta">
+              <h3>Cambiar contraseña</h3>
+              <div class="campo">
+                <input
+                  type="password"
+                  id="nueva-password"
+                  placeholder="Nueva contraseña"
+                />
+              </div>
+              <button
+                type="button"
+                class="boton boton--fantasma boton--bloque"
+                id="btn-cambiar-password"
+              >
+                Actualizar contraseña
+              </button>
+            </div>
+          </div>
+
+          <!-- Columna derecha: listado + actividad -->
+          <div>
+            <div class="tarjeta">
+              <h3>Productos publicados</h3>
+              <div class="tabla-scroll">
+                <table class="tabla">
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>Nombre</th>
+                      <th>Precio</th>
+                      <th>Envío</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tabla-productos"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="tarjeta">
+              <h3>🔄 Respaldo del catálogo</h3>
+              <p style="font-size: 0.82rem; color: var(--color-texto-suave)">
+                Descarga un archivo con tus productos y configuración de envío
+                para moverlo a otra computadora/navegador (por ejemplo, la
+                versión publicada que ve tu socia), o para tener una copia de
+                seguridad.
+              </p>
+              <div class="respaldo-botones">
+                <button
+                  type="button"
+                  class="boton boton--fantasma"
+                  id="btn-exportar-catalogo"
+                >
+                  ⬇️ Exportar catálogo
+                </button>
+                <button
+                  type="button"
+                  class="boton boton--fantasma"
+                  id="btn-importar-catalogo"
+                >
+                  ⬆️ Importar catálogo
+                </button>
+                <input
+                  type="file"
+                  id="input-importar-catalogo"
+                  accept="application/json"
+                  style="display: none"
+                />
+              </div>
+            </div>
+
+            <div class="tarjeta">
+              <h3>📋 Actividad reciente</h3>
+              <ul class="lista-actividad" id="lista-actividad"></ul>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="js/data.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/admin.js"></script>
+  </body>
+</html>
