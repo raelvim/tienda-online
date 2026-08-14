@@ -2,7 +2,7 @@
    admin.js
    Lógica del panel de administración: login, CRUD de productos,
    configuración de envío por tramos y actividad reciente.
-   AHORA CON API (MongoDB)
+   AHORA CON API (MongoDB) - VERSIÓN CORREGIDA
    ========================================================= */
 
 let imagenSeleccionada = "";
@@ -51,7 +51,7 @@ const MONEDAS_PRESET = [
 document.addEventListener("DOMContentLoaded", async () => {
   // Verificar si hay sesión activa
   if (haySesionAdmin()) {
-    mostrarPanel();
+    await mostrarPanel();
   }
 
   // Event listeners
@@ -122,23 +122,23 @@ async function intentarLogin() {
   if (valido) {
     mensaje.textContent = "";
     document.getElementById("input-password").value = "";
-    mostrarPanel();
+    await mostrarPanel();
   } else {
     mensaje.textContent = "Contraseña incorrecta.";
   }
 }
 
 /* ================= PANEL PRINCIPAL ================= */
-function mostrarPanel() {
+async function mostrarPanel() {
   document.getElementById("vista-login").style.display = "none";
   document.getElementById("vista-panel").style.display = "block";
-  renderizarTodo();
+  await renderizarTodo();
 }
 
 async function renderizarTodo() {
   await renderizarEstadisticas();
   await renderizarTablaProductos();
-  renderizarTramos();
+  await renderizarTramos();
   await renderizarActividad();
 }
 
@@ -146,17 +146,29 @@ async function renderizarTodo() {
 async function renderizarEstadisticas() {
   const productos = await obtenerProductos();
   const valorCatalogo = productos.reduce((acc, p) => acc + (p.precio || 0), 0);
-  const cantidadCarrito = obtenerCarrito().reduce(
-    (acc, i) => acc + (i.cantidad || 0),
-    0,
-  );
+
+  // Obtener carrito - ahora es async
+  let cantidadCarrito = 0;
+  try {
+    const carrito = await obtenerCarrito();
+    if (Array.isArray(carrito)) {
+      cantidadCarrito = carrito.reduce((acc, i) => acc + (i.cantidad || 0), 0);
+    }
+  } catch (error) {
+    console.error("Error al obtener carrito:", error);
+  }
 
   document.getElementById("stat-total-productos").textContent =
     productos.length;
   document.getElementById("stat-valor-catalogo").textContent =
     formatearDinero(valorCatalogo);
-  document.getElementById("stat-favoritos").textContent =
-    obtenerFavoritos().length;
+
+  const favoritos = await obtenerFavoritos();
+  document.getElementById("stat-favoritos").textContent = Array.isArray(
+    favoritos,
+  )
+    ? favoritos.length
+    : 0;
   document.getElementById("stat-carrito").textContent = cantidadCarrito;
 }
 
@@ -197,7 +209,7 @@ async function guardarProductoDesdeForm(e) {
     formaEnvio,
   };
 
-  if (id) datos.id = id;
+  if (id) datos._id = id;
   if (imagenSeleccionada) datos.imagen = imagenSeleccionada;
 
   const resultado = await guardarProducto(datos);
@@ -277,7 +289,7 @@ async function renderizarTablaProductos() {
   const tbody = document.getElementById("tabla-productos");
   const productos = await obtenerProductos();
 
-  if (!productos.length) {
+  if (!productos || !productos.length) {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--color-texto-suave);">No hay productos todavía.</td></tr>`;
     return;
   }
@@ -313,21 +325,23 @@ async function renderizarTablaProductos() {
 }
 
 /* ================= TRAMOS DE ENVÍO ================= */
-function renderizarTramos() {
+async function renderizarTramos() {
   const contenedor = document.getElementById("lista-tramos");
   contenedor.innerHTML = "";
-  const tramos = obtenerConfigEnvio();
-  if (tramos.length) {
+  const tramos = await obtenerConfigEnvio();
+  if (tramos && tramos.length) {
     tramos.forEach((tramo) => agregarFilaTramo(tramo));
   } else {
     agregarFilaTramo({ desde: 1, costo: 0 });
   }
-  document.getElementById("direccion-local").value = obtenerDireccionLocal();
+  const direccion = await obtenerDireccionLocal();
+  document.getElementById("direccion-local").value = direccion || "";
 }
 
 function agregarFilaTramo(tramo = { desde: 1, costo: 0 }) {
   const contenedor = document.getElementById("lista-tramos");
-  const simbolo = obtenerConfigMoneda().simbolo;
+  const moneda = obtenerConfigMoneda(); // Esta aún es sincrónica
+  const simbolo = moneda.simbolo || "$";
   const fila = document.createElement("div");
   fila.className = "fila-tramo";
   fila.innerHTML = `
@@ -351,21 +365,21 @@ function agregarFilaTramo(tramo = { desde: 1, costo: 0 }) {
   contenedor.appendChild(fila);
 }
 
-function guardarTramosDesdeForm() {
+async function guardarTramosDesdeForm() {
   const filas = document.querySelectorAll(".fila-tramo");
   const tramos = Array.from(filas).map((fila) => ({
     desde: Number(fila.querySelector(".tramo-desde").value) || 1,
     costo: Number(fila.querySelector(".tramo-costo").value) || 0,
   }));
 
-  // Validar que los tramos estén ordenados
   const ordenados = [...tramos].sort((a, b) => a.desde - b.desde);
 
-  guardarConfigEnvio(ordenados);
-  guardarDireccionLocal(document.getElementById("direccion-local").value);
+  await guardarConfigEnvio(ordenados);
+  const direccion = document.getElementById("direccion-local").value;
+  await guardarDireccionLocal(direccion);
   mostrarToast("Configuración de envío guardada", "exito");
-  renderizarTramos();
-  renderizarActividad();
+  await renderizarTramos();
+  await renderizarActividad();
 }
 
 /* ================= MONEDA ================= */
@@ -375,13 +389,20 @@ function inicializarSelectorMoneda() {
     (m) => `<option value="${m.codigo}">${escaparHtml(m.etiqueta)}</option>`,
   ).join("");
 
-  const actual = obtenerConfigMoneda();
-  const coincide = MONEDAS_PRESET.some(
-    (m) => m.codigo === actual.codigo && m.codigo !== "PERSONALIZADO",
-  );
-  select.value = coincide ? actual.codigo : "PERSONALIZADO";
-  document.getElementById("moneda-simbolo-custom").value = actual.simbolo;
-  actualizarVisibilidadSimboloCustom();
+  // Obtener moneda actual (sincrónico por ahora)
+  obtenerConfigMoneda()
+    .then((actual) => {
+      const coincide = MONEDAS_PRESET.some(
+        (m) => m.codigo === actual.codigo && m.codigo !== "PERSONALIZADO",
+      );
+      select.value = coincide ? actual.codigo : "PERSONALIZADO";
+      document.getElementById("moneda-simbolo-custom").value =
+        actual.simbolo || "$";
+      actualizarVisibilidadSimboloCustom();
+    })
+    .catch(() => {
+      select.value = "MXN";
+    });
 }
 
 function actualizarVisibilidadSimboloCustom() {
@@ -391,7 +412,7 @@ function actualizarVisibilidadSimboloCustom() {
     esPersonalizado ? "flex" : "none";
 }
 
-function guardarMonedaDesdeForm() {
+async function guardarMonedaDesdeForm() {
   const codigo = document.getElementById("moneda-preset").value;
   const preset = MONEDAS_PRESET.find((m) => m.codigo === codigo);
 
@@ -405,9 +426,9 @@ function guardarMonedaDesdeForm() {
         }
       : preset;
 
-  guardarConfigMoneda(config);
+  await guardarConfigMoneda(config);
   mostrarToast("Moneda actualizada", "exito");
-  renderizarTodo();
+  await renderizarTodo();
 }
 
 /* ================= CONTRASEÑA ================= */
@@ -436,7 +457,6 @@ async function actualizarPassword() {
     return;
   }
 
-  // Verificar contraseña actual
   const valido = await verificarPassword(actual);
   if (!valido) {
     mensaje.style.color = "var(--color-error)";
