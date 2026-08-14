@@ -1,15 +1,22 @@
 /* =========================================================
    store.js
    Lógica de la tienda pública: catálogo, favoritos y carrito.
+   AHORA CON API (MongoDB)
    ========================================================= */
 
 let vistaActual = "tienda";
 let textoBusqueda = "";
+let productosGlobales = [];
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  // Cargar productos desde la API
+  await cargarProductosIniciales();
+
+  // Renderizar la tienda
   renderizarProductos();
   actualizarContadores();
 
+  // Event listeners
   document.getElementById("input-buscar").addEventListener("input", (e) => {
     textoBusqueda = e.target.value.trim().toLowerCase();
     renderizarProductos();
@@ -47,6 +54,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 });
 
+/* ================= CARGAR PRODUCTOS ================= */
+async function cargarProductosIniciales() {
+  try {
+    productosGlobales = await obtenerProductos();
+    console.log("✅ Productos cargados desde API:", productosGlobales.length);
+  } catch (error) {
+    console.error("Error cargando productos:", error);
+    productosGlobales = [];
+  }
+}
+
+/* ================= CAMBIAR FORMA DE ENTREGA ================= */
 function cambiarFormaEntrega(metodo) {
   const direccion = document.getElementById("input-direccion-envio").value;
   guardarConfigEntrega({ metodo, direccion });
@@ -79,6 +98,7 @@ function aplicarFormaEntregaUI() {
   }
 }
 
+/* ================= CAMBIAR VISTA ================= */
 function cambiarVista(vista) {
   vistaActual = vista;
   document.querySelectorAll(".pestana").forEach((b) => {
@@ -89,13 +109,24 @@ function cambiarVista(vista) {
   renderizarProductos();
 }
 
+/* ================= RENDERIZAR PRODUCTOS ================= */
 function renderizarProductos() {
   const grid = document.getElementById("grid-productos");
-  let productos = obtenerProductos();
+  let productos = [...productosGlobales];
+
+  if (!productos || productos.length === 0) {
+    grid.innerHTML = `
+      <div class="estado-vacio" style="grid-column: 1/-1;">
+        <div class="estado-vacio__icono">📦</div>
+        <p>Todavía no hay productos cargados en la tienda.</p>
+        <p style="font-size:0.85rem;color:var(--color-texto-suave);">Agrega productos desde el panel de administración.</p>
+      </div>`;
+    return;
+  }
 
   if (vistaActual === "favoritos") {
     const favoritos = obtenerFavoritos();
-    productos = productos.filter((p) => favoritos.includes(p.id));
+    productos = productos.filter((p) => favoritos.includes(p._id || p.id));
   }
 
   if (textoBusqueda) {
@@ -107,11 +138,11 @@ function renderizarProductos() {
   if (!productos.length) {
     grid.innerHTML = `
       <div class="estado-vacio" style="grid-column: 1/-1;">
-        <div class="estado-vacio__icono">${vistaActual === "favoritos" ? "💔" : "📦"}</div>
+        <div class="estado-vacio__icono">${vistaActual === "favoritos" ? "💔" : "🔍"}</div>
         <p>${
           vistaActual === "favoritos"
             ? "Aún no tienes productos favoritos."
-            : "Todavía no hay productos cargados en la tienda."
+            : "No se encontraron productos que coincidan con tu búsqueda."
         }</p>
       </div>`;
     return;
@@ -137,27 +168,31 @@ function renderizarProductos() {
   });
 }
 
+/* ================= TARJETA PRODUCTO ================= */
 function tarjetaProductoHTML(producto) {
-  const favorito = esFavorito(producto.id);
+  const id = producto._id || producto.id;
+  const favorito = esFavorito(id);
   const imagen = producto.imagen || imagenMarcador();
+
   return `
     <div class="tarjeta-producto">
-      <button class="boton-favorito ${favorito ? "boton-favorito--activo" : ""}" data-favorito="${producto.id}" title="Guardar en favoritos">
+      <button class="boton-favorito ${favorito ? "boton-favorito--activo" : ""}" data-favorito="${id}" title="Guardar en favoritos">
         ${favorito ? "❤️" : "🤍"}
       </button>
       <img class="tarjeta-producto__imagen" src="${imagen}" alt="${escaparHtml(producto.nombre)}" />
       <div class="tarjeta-producto__cuerpo">
         <div class="tarjeta-producto__nombre">${escaparHtml(producto.nombre)}</div>
-        <div class="tarjeta-producto__desc">${escaparHtml(producto.descripcion)}</div>
-        <span class="tarjeta-producto__envio">🚚 ${escaparHtml(producto.formaEnvio)}</span>
+        <div class="tarjeta-producto__desc">${escaparHtml(producto.descripcion || "")}</div>
+        <span class="tarjeta-producto__envio">🚚 ${escaparHtml(producto.formaEnvio || "Envío estándar")}</span>
         <div class="tarjeta-producto__precio">${formatearDinero(producto.precio)}</div>
         <div class="tarjeta-producto__acciones">
-          <button class="boton boton--primario boton--bloque" data-agregar="${producto.id}">Agregar al carrito</button>
+          <button class="boton boton--primario boton--bloque" data-agregar="${id}">Agregar al carrito</button>
         </div>
       </div>
     </div>`;
 }
 
+/* ================= IMAGEN POR DEFECTO ================= */
 function imagenMarcador() {
   return (
     "data:image/svg+xml;utf8," +
@@ -169,7 +204,7 @@ function imagenMarcador() {
   );
 }
 
-/* ---------- Carrito ---------- */
+/* ================= CARRITO ================= */
 function abrirCarrito() {
   aplicarFormaEntregaUI();
   renderizarCarrito();
@@ -194,7 +229,7 @@ function renderizarCarrito() {
   const lista = document.getElementById("lista-carrito");
   const items = obtenerCarritoDetallado();
 
-  if (!items.length) {
+  if (!items || !items.length) {
     lista.innerHTML = `
       <div class="estado-vacio">
         <div class="estado-vacio__icono">🛒</div>
@@ -210,10 +245,10 @@ function renderizarCarrito() {
           <div class="item-carrito__nombre">${escaparHtml(item.nombre)}</div>
           <div class="item-carrito__precio">${formatearDinero(item.precio)} c/u</div>
           <div class="selector-cantidad">
-            <button data-restar="${item.id}">−</button>
+            <button data-restar="${item._id || item.id}">−</button>
             <span>${item.cantidad}</span>
-            <button data-sumar="${item.id}">+</button>
-            <button data-quitar="${item.id}" title="Quitar" style="margin-left:auto;color:#d93025;border-color:#d93025;">🗑</button>
+            <button data-sumar="${item._id || item.id}">+</button>
+            <button data-quitar="${item._id || item.id}" title="Quitar" style="margin-left:auto;color:#d93025;border-color:#d93025;">🗑</button>
           </div>
         </div>
       </div>`,
@@ -222,7 +257,7 @@ function renderizarCarrito() {
 
     lista.querySelectorAll("[data-sumar]").forEach((btn) =>
       btn.addEventListener("click", () => {
-        const item = items.find((i) => i.id === btn.dataset.sumar);
+        const item = items.find((i) => (i._id || i.id) === btn.dataset.sumar);
         actualizarCantidadCarrito(btn.dataset.sumar, item.cantidad + 1);
         renderizarCarrito();
         actualizarContadores();
@@ -230,7 +265,7 @@ function renderizarCarrito() {
     );
     lista.querySelectorAll("[data-restar]").forEach((btn) =>
       btn.addEventListener("click", () => {
-        const item = items.find((i) => i.id === btn.dataset.restar);
+        const item = items.find((i) => (i._id || i.id) === btn.dataset.restar);
         actualizarCantidadCarrito(btn.dataset.restar, item.cantidad - 1);
         renderizarCarrito();
         actualizarContadores();
@@ -250,6 +285,15 @@ function renderizarCarrito() {
 }
 
 function actualizarResumen(items) {
+  if (!items || !items.length) {
+    document.getElementById("resumen-subtotal").textContent =
+      formatearDinero(0);
+    document.getElementById("resumen-envio").textContent = "Gratis";
+    document.getElementById("resumen-total").textContent = formatearDinero(0);
+    document.getElementById("btn-finalizar").disabled = true;
+    return;
+  }
+
   const subtotal = items.reduce((acc, i) => acc + i.subtotal, 0);
   const cantidadTotal = items.reduce((acc, i) => acc + i.cantidad, 0);
   const esRetiro = obtenerConfigEntrega().metodo === "retiro";
@@ -264,7 +308,7 @@ function actualizarResumen(items) {
       ? "Gratis"
       : formatearDinero(envio);
   document.getElementById("resumen-total").textContent = formatearDinero(total);
-  document.getElementById("btn-finalizar").disabled = items.length === 0;
+  document.getElementById("btn-finalizar").disabled = false;
 }
 
 function actualizarContadores() {
@@ -274,9 +318,13 @@ function actualizarContadores() {
     obtenerFavoritos().length;
 }
 
+/* ================= FINALIZAR COMPRA ================= */
 function finalizarCompra() {
   const items = obtenerCarritoDetallado();
-  if (!items.length) return;
+  if (!items || !items.length) {
+    mostrarToast("El carrito está vacío", "error");
+    return;
+  }
 
   const config = obtenerConfigEntrega();
   const esRetiro = config.metodo === "retiro";

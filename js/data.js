@@ -1,23 +1,19 @@
 /* =========================================================
    data.js
-   Capa de datos: todo se guarda en localStorage (navegador).
-   Aquí NO hay diseño ni HTML, solo lógica de datos.
+   Capa de datos: TODO se guarda en el backend (MongoDB).
+   NADA se guarda en localStorage (excepto token de sesión).
    ========================================================= */
 
+// Configuración de la API
+const API_URL = "http://localhost:5000/api";
+
+// Solo guardamos el token en localStorage (para autenticación)
 const STORAGE_KEYS = {
-  PRODUCTOS: "tienda_productos",
-  CARRITO: "tienda_carrito",
-  FAVORITOS: "tienda_favoritos",
-  ENVIO: "tienda_config_envio",
-  DIRECCION_LOCAL: "tienda_direccion_local",
-  ENTREGA: "tienda_entrega",
-  MONEDA: "tienda_config_moneda",
-  LOG: "tienda_log",
-  ADMIN_HASH: "tienda_admin_hash",
+  TOKEN: "tienda_token",
   ADMIN_SESION: "tienda_admin_sesion",
 };
 
-/* ---------- Helpers genéricos de almacenamiento ---------- */
+/* ================= HELPERS ================= */
 function leer(clave, valorPorDefecto) {
   try {
     const guardado = localStorage.getItem(clave);
@@ -32,162 +28,350 @@ function guardar(clave, valor) {
   localStorage.setItem(clave, JSON.stringify(valor));
 }
 
-function generarId() {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
+/* ================= PRODUCTOS (API) ================= */
 
-/* ================= PRODUCTOS ================= */
-function obtenerProductos() {
-  return leer(STORAGE_KEYS.PRODUCTOS, []);
-}
-
-function obtenerProductoPorId(id) {
-  return obtenerProductos().find((p) => p.id === id) || null;
-}
-
-function guardarProducto(producto) {
-  const productos = obtenerProductos();
-  if (producto.id) {
-    const indice = productos.findIndex((p) => p.id === producto.id);
-    if (indice !== -1) {
-      productos[indice] = { ...productos[indice], ...producto };
-      guardar(STORAGE_KEYS.PRODUCTOS, productos);
-      registrarActividad(`Producto editado: "${producto.nombre}"`);
-      return productos[indice];
-    }
+// Obtener todos los productos
+async function obtenerProductos() {
+  try {
+    const respuesta = await fetch(`${API_URL}/productos`);
+    if (!respuesta.ok) throw new Error("Error al obtener productos");
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en obtenerProductos:", error);
+    return [];
   }
-  const nuevo = {
-    id: generarId(),
-    nombre: producto.nombre,
-    descripcion: producto.descripcion,
-    precio: Number(producto.precio),
-    formaEnvio: producto.formaEnvio || "Envío estándar",
-    imagen: producto.imagen || "",
-    creado: new Date().toISOString(),
-  };
-  productos.unshift(nuevo);
-  guardar(STORAGE_KEYS.PRODUCTOS, productos);
-  registrarActividad(`Producto agregado: "${nuevo.nombre}"`);
-  return nuevo;
 }
 
-function eliminarProducto(id) {
-  const productos = obtenerProductos();
-  const producto = productos.find((p) => p.id === id);
-  const restantes = productos.filter((p) => p.id !== id);
-  guardar(STORAGE_KEYS.PRODUCTOS, restantes);
-
-  // Limpieza en cascada: quitar de carrito y favoritos si estaba ahí
-  guardar(
-    STORAGE_KEYS.CARRITO,
-    obtenerCarrito().filter((item) => item.id !== id),
-  );
-  guardar(
-    STORAGE_KEYS.FAVORITOS,
-    obtenerFavoritos().filter((favId) => favId !== id),
-  );
-
-  if (producto) registrarActividad(`Producto eliminado: "${producto.nombre}"`);
+// Obtener un producto por ID
+async function obtenerProductoPorId(id) {
+  try {
+    const respuesta = await fetch(`${API_URL}/productos/${id}`);
+    if (!respuesta.ok) return null;
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en obtenerProductoPorId:", error);
+    return null;
+  }
 }
 
-/* ================= CARRITO ================= */
-function obtenerCarrito() {
-  return leer(STORAGE_KEYS.CARRITO, []);
+// Guardar producto (crear o actualizar)
+async function guardarProducto(producto) {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) throw new Error("No hay sesión activa");
+
+    let url = `${API_URL}/productos`;
+    let method = "POST";
+
+    if (producto._id) {
+      url = `${API_URL}/productos/${producto._id}`;
+      method = "PUT";
+    }
+
+    const respuesta = await fetch(url, {
+      method: method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        nombre: producto.nombre,
+        descripcion: producto.descripcion || "",
+        precio: Number(producto.precio),
+        formaEnvio: producto.formaEnvio || "Envío estándar",
+        imagen: producto.imagen || "",
+      }),
+    });
+
+    if (!respuesta.ok) throw new Error("Error al guardar producto");
+    const resultado = await respuesta.json();
+    await registrarActividad(
+      `Producto ${producto._id ? "editado" : "agregado"}: "${producto.nombre}"`,
+    );
+    return resultado;
+  } catch (error) {
+    console.error("Error en guardarProducto:", error);
+    return null;
+  }
 }
 
-function obtenerCarritoDetallado() {
-  const productos = obtenerProductos();
-  return obtenerCarrito()
-    .map((item) => {
-      const producto = productos.find((p) => p.id === item.id);
-      if (!producto) return null;
-      return {
-        ...producto,
-        cantidad: item.cantidad,
-        subtotal: producto.precio * item.cantidad,
-      };
-    })
-    .filter(Boolean);
+// Eliminar producto
+async function eliminarProducto(id) {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) throw new Error("No hay sesión activa");
+
+    const respuesta = await fetch(`${API_URL}/productos/${id}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!respuesta.ok) throw new Error("Error al eliminar producto");
+
+    await registrarActividad(`Producto eliminado (ID: ${id})`);
+    return true;
+  } catch (error) {
+    console.error("Error en eliminarProducto:", error);
+    return false;
+  }
 }
 
-function agregarACarrito(idProducto, cantidad = 1) {
-  const carrito = obtenerCarrito();
-  const existente = carrito.find((item) => item.id === idProducto);
+/* ================= CARRITO (API) ================= */
+
+// Obtener carrito del usuario
+async function obtenerCarrito() {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) return [];
+
+    const respuesta = await fetch(`${API_URL}/carrito`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!respuesta.ok) return [];
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en obtenerCarrito:", error);
+    return [];
+  }
+}
+
+// Obtener carrito con detalles de productos
+async function obtenerCarritoDetallado() {
+  try {
+    const carrito = await obtenerCarrito();
+    const productos = await obtenerProductos();
+
+    return carrito
+      .map((item) => {
+        const producto = productos.find((p) => p._id === item.productoId);
+        if (!producto) return null;
+        return {
+          ...producto,
+          cantidad: item.cantidad,
+          subtotal: producto.precio * item.cantidad,
+        };
+      })
+      .filter(Boolean);
+  } catch (error) {
+    console.error("Error en obtenerCarritoDetallado:", error);
+    return [];
+  }
+}
+
+// Agregar al carrito
+async function agregarACarrito(productoId, cantidad = 1) {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) {
+      // Si no hay sesión, usar localStorage temporal
+      return agregarACarritoLocal(productoId, cantidad);
+    }
+
+    const respuesta = await fetch(`${API_URL}/carrito`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ productoId, cantidad }),
+    });
+
+    if (!respuesta.ok) throw new Error("Error al agregar al carrito");
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en agregarACarrito:", error);
+    // Fallback a localStorage
+    return agregarACarritoLocal(productoId, cantidad);
+  }
+}
+
+// Actualizar cantidad en carrito
+async function actualizarCantidadCarrito(productoId, cantidad) {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) {
+      return actualizarCantidadCarritoLocal(productoId, cantidad);
+    }
+
+    const respuesta = await fetch(`${API_URL}/carrito/${productoId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ cantidad }),
+    });
+
+    if (!respuesta.ok) throw new Error("Error al actualizar carrito");
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en actualizarCantidadCarrito:", error);
+    return actualizarCantidadCarritoLocal(productoId, cantidad);
+  }
+}
+
+// Quitar del carrito
+async function quitarDelCarrito(productoId) {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) {
+      return quitarDelCarritoLocal(productoId);
+    }
+
+    const respuesta = await fetch(`${API_URL}/carrito/${productoId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!respuesta.ok) throw new Error("Error al quitar del carrito");
+    return true;
+  } catch (error) {
+    console.error("Error en quitarDelCarrito:", error);
+    return quitarDelCarritoLocal(productoId);
+  }
+}
+
+// Vaciar carrito
+async function vaciarCarrito() {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) {
+      vaciarCarritoLocal();
+      return;
+    }
+
+    await fetch(`${API_URL}/carrito`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (error) {
+    console.error("Error en vaciarCarrito:", error);
+    vaciarCarritoLocal();
+  }
+}
+
+/* ================= CARRITO (FALLBACK LOCAL) ================= */
+// Estas funciones solo se usan si no hay sesión activa
+let carritoLocal = [];
+
+function agregarACarritoLocal(productoId, cantidad = 1) {
+  const existente = carritoLocal.find((item) => item.productoId === productoId);
   if (existente) {
     existente.cantidad += cantidad;
   } else {
-    carrito.push({ id: idProducto, cantidad });
+    carritoLocal.push({ productoId, cantidad });
   }
-  guardar(STORAGE_KEYS.CARRITO, carrito);
+  return carritoLocal;
 }
 
-function actualizarCantidadCarrito(idProducto, cantidad) {
-  let carrito = obtenerCarrito();
+function actualizarCantidadCarritoLocal(productoId, cantidad) {
   if (cantidad <= 0) {
-    carrito = carrito.filter((item) => item.id !== idProducto);
+    carritoLocal = carritoLocal.filter(
+      (item) => item.productoId !== productoId,
+    );
   } else {
-    const item = carrito.find((item) => item.id === idProducto);
+    const item = carritoLocal.find((item) => item.productoId === productoId);
     if (item) item.cantidad = cantidad;
   }
-  guardar(STORAGE_KEYS.CARRITO, carrito);
+  return carritoLocal;
 }
 
-function quitarDelCarrito(idProducto) {
-  guardar(
-    STORAGE_KEYS.CARRITO,
-    obtenerCarrito().filter((item) => item.id !== idProducto),
-  );
+function quitarDelCarritoLocal(productoId) {
+  carritoLocal = carritoLocal.filter((item) => item.productoId !== productoId);
+  return true;
 }
 
-function vaciarCarrito() {
-  guardar(STORAGE_KEYS.CARRITO, []);
+function vaciarCarritoLocal() {
+  carritoLocal = [];
 }
 
-/* ================= FAVORITOS ================= */
-function obtenerFavoritos() {
-  return leer(STORAGE_KEYS.FAVORITOS, []);
-}
+/* ================= FAVORITOS (API) ================= */
 
-function esFavorito(idProducto) {
-  return obtenerFavoritos().includes(idProducto);
-}
+async function obtenerFavoritos() {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) return [];
 
-function alternarFavorito(idProducto) {
-  const favoritos = obtenerFavoritos();
-  const indice = favoritos.indexOf(idProducto);
-  if (indice === -1) {
-    favoritos.push(idProducto);
-  } else {
-    favoritos.splice(indice, 1);
+    const respuesta = await fetch(`${API_URL}/favoritos`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!respuesta.ok) return [];
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en obtenerFavoritos:", error);
+    return [];
   }
-  guardar(STORAGE_KEYS.FAVORITOS, favoritos);
-  return favoritos.includes(idProducto);
 }
 
-/* ================= ENVÍO (configurable por tramos de cantidad) ================= */
-// Ejemplo: desde 1 unidad = 100, desde 5 unidades = 70, desde 10 = 0 (gratis)
-const TRAMOS_ENVIO_DEFECTO = [
-  { desde: 1, costo: 100 },
-  { desde: 5, costo: 70 },
-  { desde: 10, costo: 0 },
-];
-
-function obtenerConfigEnvio() {
-  return leer(STORAGE_KEYS.ENVIO, TRAMOS_ENVIO_DEFECTO);
+async function esFavorito(productoId) {
+  const favoritos = await obtenerFavoritos();
+  return favoritos.includes(productoId);
 }
 
-function guardarConfigEnvio(tramos) {
-  const limpios = tramos
-    .map((t) => ({ desde: Number(t.desde), costo: Number(t.costo) }))
-    .sort((a, b) => a.desde - b.desde);
-  guardar(STORAGE_KEYS.ENVIO, limpios);
-  registrarActividad("Configuración de envío actualizada");
-  return limpios;
+async function alternarFavorito(productoId) {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) {
+      console.warn("No hay sesión para guardar favoritos");
+      return false;
+    }
+
+    const respuesta = await fetch(`${API_URL}/favoritos/${productoId}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!respuesta.ok) throw new Error("Error al alternar favorito");
+    const resultado = await respuesta.json();
+    return resultado.esFavorito;
+  } catch (error) {
+    console.error("Error en alternarFavorito:", error);
+    return false;
+  }
 }
 
-function calcularCostoEnvio(cantidadTotalUnidades) {
-  const tramos = obtenerConfigEnvio();
-  if (!tramos.length || cantidadTotalUnidades <= 0) return 0;
+/* ================= ENVÍO (API) ================= */
+
+async function obtenerConfigEnvio() {
+  try {
+    const respuesta = await fetch(`${API_URL}/config/envio`);
+    if (!respuesta.ok) return [{ desde: 1, costo: 100 }];
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en obtenerConfigEnvio:", error);
+    return [{ desde: 1, costo: 100 }];
+  }
+}
+
+async function guardarConfigEnvio(tramos) {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) throw new Error("No hay sesión activa");
+
+    const respuesta = await fetch(`${API_URL}/config/envio`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(tramos),
+    });
+
+    if (!respuesta.ok)
+      throw new Error("Error al guardar configuración de envío");
+    await registrarActividad("Configuración de envío actualizada");
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en guardarConfigEnvio:", error);
+    return tramos;
+  }
+}
+
+async function calcularCostoEnvio(cantidadTotalUnidades) {
+  const tramos = await obtenerConfigEnvio();
+  if (!tramos || !tramos.length || cantidadTotalUnidades <= 0) return 0;
   const ordenados = [...tramos].sort((a, b) => a.desde - b.desde);
   let costo = ordenados[0].costo;
   for (const tramo of ordenados) {
@@ -198,60 +382,130 @@ function calcularCostoEnvio(cantidadTotalUnidades) {
   return costo;
 }
 
-/* ================= DIRECCIÓN DEL LOCAL (para retiro) ================= */
-function obtenerDireccionLocal() {
-  return leer(STORAGE_KEYS.DIRECCION_LOCAL, "");
+/* ================= DIRECCIÓN LOCAL (API) ================= */
+
+async function obtenerDireccionLocal() {
+  try {
+    const respuesta = await fetch(`${API_URL}/config/direccion-local`);
+    if (!respuesta.ok) return "";
+    const data = await respuesta.json();
+    return data.direccion || "";
+  } catch (error) {
+    console.error("Error en obtenerDireccionLocal:", error);
+    return "";
+  }
 }
 
-function guardarDireccionLocal(direccion) {
-  const limpia = (direccion || "").trim();
-  guardar(STORAGE_KEYS.DIRECCION_LOCAL, limpia);
-  registrarActividad("Dirección de retiro en el local actualizada");
-  return limpia;
+async function guardarDireccionLocal(direccion) {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) throw new Error("No hay sesión activa");
+
+    const respuesta = await fetch(`${API_URL}/config/direccion-local`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ direccion }),
+    });
+
+    if (!respuesta.ok) throw new Error("Error al guardar dirección");
+    await registrarActividad("Dirección de retiro actualizada");
+    return direccion;
+  } catch (error) {
+    console.error("Error en guardarDireccionLocal:", error);
+    return direccion;
+  }
 }
 
-/* ================= FORMA DE ENTREGA elegida por el cliente ================= */
-const ENTREGA_DEFECTO = { metodo: "domicilio", direccion: "" };
+/* ================= MONEDA (API) ================= */
 
-function obtenerConfigEntrega() {
-  return leer(STORAGE_KEYS.ENTREGA, ENTREGA_DEFECTO);
+async function obtenerConfigMoneda() {
+  try {
+    const respuesta = await fetch(`${API_URL}/config/moneda`);
+    if (!respuesta.ok) return { codigo: "MXN", simbolo: "$", locale: "es-MX" };
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en obtenerConfigMoneda:", error);
+    return { codigo: "MXN", simbolo: "$", locale: "es-MX" };
+  }
 }
 
-function guardarConfigEntrega(config) {
-  guardar(STORAGE_KEYS.ENTREGA, {
-    metodo: config.metodo === "retiro" ? "retiro" : "domicilio",
-    direccion: config.direccion || "",
-  });
+async function guardarConfigMoneda(config) {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) throw new Error("No hay sesión activa");
+
+    const respuesta = await fetch(`${API_URL}/config/moneda`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(config),
+    });
+
+    if (!respuesta.ok) throw new Error("Error al guardar moneda");
+    await registrarActividad(
+      `Moneda actualizada a ${config.simbolo} (${config.codigo})`,
+    );
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en guardarConfigMoneda:", error);
+    return config;
+  }
 }
 
-/* ================= MONEDA ================= */
-const MONEDA_DEFECTO = { codigo: "MXN", simbolo: "$", locale: "es-MX" };
+/* ================= FORMA DE ENTREGA (API) ================= */
 
-function obtenerConfigMoneda() {
-  return leer(STORAGE_KEYS.MONEDA, MONEDA_DEFECTO);
+async function obtenerConfigEntrega() {
+  try {
+    const respuesta = await fetch(`${API_URL}/config/entrega`);
+    if (!respuesta.ok) return { metodo: "domicilio", direccion: "" };
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en obtenerConfigEntrega:", error);
+    return { metodo: "domicilio", direccion: "" };
+  }
 }
 
-function guardarConfigMoneda(config) {
-  const limpio = {
-    codigo: config.codigo || "PERSONALIZADO",
-    simbolo: (config.simbolo || "$").trim() || "$",
-    locale: config.locale || "es-MX",
-  };
-  guardar(STORAGE_KEYS.MONEDA, limpio);
-  registrarActividad(
-    `Moneda actualizada a ${limpio.simbolo} (${limpio.codigo})`,
-  );
-  return limpio;
+async function guardarConfigEntrega(config) {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) {
+      console.warn("No hay sesión, guardando en localStorage temporal");
+      guardar("tienda_entrega_temp", config);
+      return config;
+    }
+
+    const respuesta = await fetch(`${API_URL}/config/entrega`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(config),
+    });
+
+    if (!respuesta.ok)
+      throw new Error("Error al guardar configuración de entrega");
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en guardarConfigEntrega:", error);
+    return config;
+  }
 }
 
-/* ================= RESPALDO (exportar/importar catálogo) ================= */
-// Permite mover productos y config. de envío entre navegadores/dispositivos
-// sin necesidad de un backend (útil para compartir el catálogo).
-function exportarCatalogo() {
+/* ================= RESPALDO (EXPORTAR/IMPORTAR) ================= */
+
+async function exportarCatalogo() {
+  const productos = await obtenerProductos();
+  const envio = await obtenerConfigEnvio();
   return JSON.stringify(
     {
-      productos: obtenerProductos(),
-      envio: obtenerConfigEnvio(),
+      productos: productos,
+      envio: envio,
       exportadoEl: new Date().toISOString(),
     },
     null,
@@ -259,68 +513,158 @@ function exportarCatalogo() {
   );
 }
 
-function importarCatalogo(jsonTexto) {
+async function importarCatalogo(jsonTexto) {
   const datos = JSON.parse(jsonTexto);
   if (!Array.isArray(datos.productos)) {
     throw new Error(
       "El archivo no tiene un formato válido (falta 'productos').",
     );
   }
-  guardar(STORAGE_KEYS.PRODUCTOS, datos.productos);
-  if (Array.isArray(datos.envio)) {
-    guardar(STORAGE_KEYS.ENVIO, datos.envio);
+
+  const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+  if (!token) throw new Error("No hay sesión activa");
+
+  // Eliminar productos existentes
+  const actuales = await obtenerProductos();
+  for (const p of actuales) {
+    await fetch(`${API_URL}/productos/${p._id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
   }
-  registrarActividad("Catálogo importado desde archivo de respaldo");
+
+  // Insertar nuevos productos
+  for (const producto of datos.productos) {
+    await fetch(`${API_URL}/productos`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        nombre: producto.nombre,
+        descripcion: producto.descripcion || "",
+        precio: Number(producto.precio),
+        formaEnvio: producto.formaEnvio || "Envío estándar",
+        imagen: producto.imagen || "",
+      }),
+    });
+  }
+
+  if (Array.isArray(datos.envio)) {
+    await guardarConfigEnvio(datos.envio);
+  }
+
+  await registrarActividad("Catálogo importado desde archivo de respaldo");
 }
 
-/* ================= REGISTRO DE ACTIVIDAD (control visual) ================= */
-function registrarActividad(mensaje) {
-  const log = leer(STORAGE_KEYS.LOG, []);
-  log.unshift({ mensaje, fecha: new Date().toISOString() });
-  guardar(STORAGE_KEYS.LOG, log.slice(0, 50));
+/* ================= ACTIVIDAD (API) ================= */
+
+async function registrarActividad(mensaje) {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) return;
+
+    await fetch(`${API_URL}/actividad`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ mensaje }),
+    });
+  } catch (error) {
+    console.error("Error en registrarActividad:", error);
+  }
 }
 
-function obtenerActividad() {
-  return leer(STORAGE_KEYS.LOG, []);
+async function obtenerActividad() {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) return [];
+
+    const respuesta = await fetch(`${API_URL}/actividad`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!respuesta.ok) return [];
+    return await respuesta.json();
+  } catch (error) {
+    console.error("Error en obtenerActividad:", error);
+    return [];
+  }
 }
 
-/* ================= ADMIN (protección simple con hash) ================= */
-async function calcularHash(texto) {
-  const datos = new TextEncoder().encode(texto);
-  const buffer = await crypto.subtle.digest("SHA-256", datos);
-  return Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+/* ================= ADMIN (AUTENTICACIÓN) ================= */
 
-async function asegurarPasswordInicial() {
-  if (!localStorage.getItem(STORAGE_KEYS.ADMIN_HASH)) {
-    const hashDefecto = await calcularHash("admin123");
-    localStorage.setItem(STORAGE_KEYS.ADMIN_HASH, hashDefecto);
+async function iniciarSesionAdmin(contraseña) {
+  try {
+    const respuesta = await fetch(`${API_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: contraseña }),
+    });
+
+    if (!respuesta.ok) return false;
+
+    const datos = await respuesta.json();
+    localStorage.setItem(STORAGE_KEYS.TOKEN, datos.token);
+    sessionStorage.setItem(STORAGE_KEYS.ADMIN_SESION, "1");
+    await registrarActividad("Inicio de sesión de administrador");
+    return true;
+  } catch (error) {
+    console.error("Error en iniciarSesionAdmin:", error);
+    return false;
   }
 }
 
 async function verificarPassword(intento) {
-  await asegurarPasswordInicial();
-  const hashGuardado = localStorage.getItem(STORAGE_KEYS.ADMIN_HASH);
-  const hashIntento = await calcularHash(intento);
-  return hashIntento === hashGuardado;
+  try {
+    const respuesta = await fetch(`${API_URL}/auth/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: intento }),
+    });
+    return respuesta.ok;
+  } catch (error) {
+    console.error("Error en verificarPassword:", error);
+    return false;
+  }
 }
 
 async function cambiarPassword(nueva) {
-  const hash = await calcularHash(nueva);
-  localStorage.setItem(STORAGE_KEYS.ADMIN_HASH, hash);
-  registrarActividad("Contraseña de administrador actualizada");
-}
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) throw new Error("No hay sesión activa");
 
-function iniciarSesionAdmin() {
-  sessionStorage.setItem(STORAGE_KEYS.ADMIN_SESION, "1");
+    const respuesta = await fetch(`${API_URL}/auth/change-password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ newPassword: nueva }),
+    });
+
+    if (respuesta.ok) {
+      await registrarActividad("Contraseña de administrador actualizada");
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error("Error en cambiarPassword:", error);
+    return false;
+  }
 }
 
 function cerrarSesionAdmin() {
+  localStorage.removeItem(STORAGE_KEYS.TOKEN);
   sessionStorage.removeItem(STORAGE_KEYS.ADMIN_SESION);
+  registrarActividad("Cierre de sesión de administrador");
 }
 
 function haySesionAdmin() {
-  return sessionStorage.getItem(STORAGE_KEYS.ADMIN_SESION) === "1";
+  return (
+    sessionStorage.getItem(STORAGE_KEYS.ADMIN_SESION) === "1" &&
+    localStorage.getItem(STORAGE_KEYS.TOKEN) !== null
+  );
 }

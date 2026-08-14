@@ -2,9 +2,11 @@
    admin.js
    Lógica del panel de administración: login, CRUD de productos,
    configuración de envío por tramos y actividad reciente.
+   AHORA CON API (MongoDB)
    ========================================================= */
 
 let imagenSeleccionada = "";
+let productoEditando = null;
 
 const MONEDAS_PRESET = [
   {
@@ -47,12 +49,12 @@ const MONEDAS_PRESET = [
 ];
 
 document.addEventListener("DOMContentLoaded", async () => {
-  await asegurarPasswordInicial();
-
+  // Verificar si hay sesión activa
   if (haySesionAdmin()) {
     mostrarPanel();
   }
 
+  // Event listeners
   document
     .getElementById("btn-entrar")
     .addEventListener("click", intentarLogin);
@@ -106,38 +108,46 @@ document.addEventListener("DOMContentLoaded", async () => {
     .addEventListener("change", importarCatalogoDesdeUI);
 });
 
+/* ================= LOGIN ================= */
 async function intentarLogin() {
   const password = document.getElementById("input-password").value;
   const mensaje = document.getElementById("mensaje-login");
-  const valido = await verificarPassword(password);
+
+  if (!password) {
+    mensaje.textContent = "Ingresa la contraseña.";
+    return;
+  }
+
+  const valido = await iniciarSesionAdmin(password);
   if (valido) {
-    iniciarSesionAdmin();
-    registrarActividad("Inicio de sesión en el panel de administración");
+    mensaje.textContent = "";
+    document.getElementById("input-password").value = "";
     mostrarPanel();
   } else {
     mensaje.textContent = "Contraseña incorrecta.";
   }
 }
 
+/* ================= PANEL PRINCIPAL ================= */
 function mostrarPanel() {
   document.getElementById("vista-login").style.display = "none";
   document.getElementById("vista-panel").style.display = "block";
   renderizarTodo();
 }
 
-function renderizarTodo() {
-  renderizarEstadisticas();
-  renderizarTablaProductos();
+async function renderizarTodo() {
+  await renderizarEstadisticas();
+  await renderizarTablaProductos();
   renderizarTramos();
-  renderizarActividad();
+  await renderizarActividad();
 }
 
-/* ---------- Estadísticas ---------- */
-function renderizarEstadisticas() {
-  const productos = obtenerProductos();
-  const valorCatalogo = productos.reduce((acc, p) => acc + p.precio, 0);
+/* ================= ESTADÍSTICAS ================= */
+async function renderizarEstadisticas() {
+  const productos = await obtenerProductos();
+  const valorCatalogo = productos.reduce((acc, p) => acc + (p.precio || 0), 0);
   const cantidadCarrito = obtenerCarrito().reduce(
-    (acc, i) => acc + i.cantidad,
+    (acc, i) => acc + (i.cantidad || 0),
     0,
   );
 
@@ -150,7 +160,7 @@ function renderizarEstadisticas() {
   document.getElementById("stat-carrito").textContent = cantidadCarrito;
 }
 
-/* ---------- Productos ---------- */
+/* ================= PRODUCTOS ================= */
 function previsualizarImagen(e) {
   const archivo = e.target.files[0];
   if (!archivo) return;
@@ -164,8 +174,9 @@ function previsualizarImagen(e) {
   lector.readAsDataURL(archivo);
 }
 
-function guardarProductoDesdeForm(e) {
+async function guardarProductoDesdeForm(e) {
   e.preventDefault();
+
   const id = document.getElementById("producto-id").value;
   const nombre = document.getElementById("producto-nombre").value.trim();
   const descripcion = document
@@ -174,16 +185,29 @@ function guardarProductoDesdeForm(e) {
   const precio = document.getElementById("producto-precio").value;
   const formaEnvio = document.getElementById("producto-forma-envio").value;
 
-  if (!nombre || !descripcion || precio === "") return;
+  if (!nombre || !descripcion || precio === "") {
+    mostrarToast("Completa todos los campos", "error");
+    return;
+  }
 
-  const datos = { nombre, descripcion, precio, formaEnvio };
+  const datos = {
+    nombre,
+    descripcion,
+    precio: Number(precio),
+    formaEnvio,
+  };
+
   if (id) datos.id = id;
   if (imagenSeleccionada) datos.imagen = imagenSeleccionada;
 
-  guardarProducto(datos);
-  mostrarToast(id ? "Producto actualizado" : "Producto agregado", "exito");
-  cancelarEdicion();
-  renderizarTodo();
+  const resultado = await guardarProducto(datos);
+  if (resultado) {
+    mostrarToast(id ? "Producto actualizado" : "Producto agregado", "exito");
+    cancelarEdicion();
+    await renderizarTodo();
+  } else {
+    mostrarToast("Error al guardar el producto", "error");
+  }
 }
 
 function cancelarEdicion() {
@@ -194,16 +218,24 @@ function cancelarEdicion() {
   document.getElementById("btn-cancelar-edicion").style.display = "none";
   document.getElementById("preview-imagen").style.display = "none";
   imagenSeleccionada = "";
+  productoEditando = null;
 }
 
-function editarProducto(id) {
-  const producto = obtenerProductoPorId(id);
-  if (!producto) return;
-  document.getElementById("producto-id").value = producto.id;
+async function editarProducto(id) {
+  const producto = await obtenerProductoPorId(id);
+  if (!producto) {
+    mostrarToast("Producto no encontrado", "error");
+    return;
+  }
+
+  productoEditando = producto;
+  document.getElementById("producto-id").value = producto._id || producto.id;
   document.getElementById("producto-nombre").value = producto.nombre;
   document.getElementById("producto-descripcion").value = producto.descripcion;
   document.getElementById("producto-precio").value = producto.precio;
-  document.getElementById("producto-forma-envio").value = producto.formaEnvio;
+  document.getElementById("producto-forma-envio").value =
+    producto.formaEnvio || "Envío estándar";
+
   imagenSeleccionada = producto.imagen || "";
   const preview = document.getElementById("preview-imagen");
   if (producto.imagen) {
@@ -212,29 +244,38 @@ function editarProducto(id) {
   } else {
     preview.style.display = "none";
   }
+
   document.getElementById("titulo-form-producto").textContent =
     "Editar producto";
   document.getElementById("btn-cancelar-edicion").style.display = "block";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function confirmarEliminarProducto(id) {
-  const producto = obtenerProductoPorId(id);
-  if (!producto) return;
+async function confirmarEliminarProducto(id) {
+  const producto = await obtenerProductoPorId(id);
+  if (!producto) {
+    mostrarToast("Producto no encontrado", "error");
+    return;
+  }
+
   if (
     confirm(
       `¿Eliminar el producto "${producto.nombre}"? Esta acción no se puede deshacer.`,
     )
   ) {
-    eliminarProducto(id);
-    mostrarToast("Producto eliminado", "exito");
-    renderizarTodo();
+    const resultado = await eliminarProducto(id);
+    if (resultado) {
+      mostrarToast("Producto eliminado", "exito");
+      await renderizarTodo();
+    } else {
+      mostrarToast("Error al eliminar el producto", "error");
+    }
   }
 }
 
-function renderizarTablaProductos() {
+async function renderizarTablaProductos() {
   const tbody = document.getElementById("tabla-productos");
-  const productos = obtenerProductos();
+  const productos = await obtenerProductos();
 
   if (!productos.length) {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--color-texto-suave);">No hay productos todavía.</td></tr>`;
@@ -248,10 +289,10 @@ function renderizarTablaProductos() {
       <td><img src="${p.imagen || ""}" onerror="this.style.visibility='hidden'" alt="" /></td>
       <td>${escaparHtml(p.nombre)}</td>
       <td>${formatearDinero(p.precio)}</td>
-      <td>${escaparHtml(p.formaEnvio)}</td>
+      <td>${escaparHtml(p.formaEnvio || "Envío estándar")}</td>
       <td class="acciones-tabla">
-        <button class="boton boton--fantasma" data-editar="${p.id}">Editar</button>
-        <button class="boton boton--peligro" data-eliminar="${p.id}">Eliminar</button>
+        <button class="boton boton--fantasma" data-editar="${p._id || p.id}">Editar</button>
+        <button class="boton boton--peligro" data-eliminar="${p._id || p.id}">Eliminar</button>
       </td>
     </tr>`,
     )
@@ -271,11 +312,16 @@ function renderizarTablaProductos() {
     );
 }
 
-/* ---------- Tramos de envío ---------- */
+/* ================= TRAMOS DE ENVÍO ================= */
 function renderizarTramos() {
   const contenedor = document.getElementById("lista-tramos");
   contenedor.innerHTML = "";
-  obtenerConfigEnvio().forEach((tramo) => agregarFilaTramo(tramo));
+  const tramos = obtenerConfigEnvio();
+  if (tramos.length) {
+    tramos.forEach((tramo) => agregarFilaTramo(tramo));
+  } else {
+    agregarFilaTramo({ desde: 1, costo: 0 });
+  }
   document.getElementById("direccion-local").value = obtenerDireccionLocal();
 }
 
@@ -295,30 +341,34 @@ function agregarFilaTramo(tramo = { desde: 1, costo: 0 }) {
     </div>
     <button type="button" class="boton boton--peligro" title="Quitar tramo">🗑</button>
   `;
-  fila.querySelector("button").addEventListener("click", () => fila.remove());
+  fila.querySelector("button").addEventListener("click", () => {
+    if (document.querySelectorAll(".fila-tramo").length > 1) {
+      fila.remove();
+    } else {
+      mostrarToast("Debe haber al menos un tramo", "error");
+    }
+  });
   contenedor.appendChild(fila);
 }
 
 function guardarTramosDesdeForm() {
   const filas = document.querySelectorAll(".fila-tramo");
   const tramos = Array.from(filas).map((fila) => ({
-    desde: fila.querySelector(".tramo-desde").value || 1,
-    costo: fila.querySelector(".tramo-costo").value || 0,
+    desde: Number(fila.querySelector(".tramo-desde").value) || 1,
+    costo: Number(fila.querySelector(".tramo-costo").value) || 0,
   }));
 
-  if (!tramos.length) {
-    mostrarToast("Agrega al menos un tramo de envío", "error");
-    return;
-  }
+  // Validar que los tramos estén ordenados
+  const ordenados = [...tramos].sort((a, b) => a.desde - b.desde);
 
-  guardarConfigEnvio(tramos);
+  guardarConfigEnvio(ordenados);
   guardarDireccionLocal(document.getElementById("direccion-local").value);
   mostrarToast("Configuración de envío guardada", "exito");
   renderizarTramos();
   renderizarActividad();
 }
 
-/* ---------- Moneda ---------- */
+/* ================= MONEDA ================= */
 function inicializarSelectorMoneda() {
   const select = document.getElementById("moneda-preset");
   select.innerHTML = MONEDAS_PRESET.map(
@@ -349,7 +399,8 @@ function guardarMonedaDesdeForm() {
     codigo === "PERSONALIZADO"
       ? {
           codigo: "PERSONALIZADO",
-          simbolo: document.getElementById("moneda-simbolo-custom").value,
+          simbolo:
+            document.getElementById("moneda-simbolo-custom").value || "$",
           locale: "es-MX",
         }
       : preset;
@@ -359,30 +410,66 @@ function guardarMonedaDesdeForm() {
   renderizarTodo();
 }
 
-/* ---------- Contraseña ---------- */
+/* ================= CONTRASEÑA ================= */
 async function actualizarPassword() {
+  const actual = document.getElementById("password-actual").value;
   const nueva = document.getElementById("nueva-password").value;
-  if (!nueva || nueva.length < 4) {
-    mostrarToast("La contraseña debe tener al menos 4 caracteres", "error");
+  const confirmar = document.getElementById("confirmar-password").value;
+  const mensaje = document.getElementById("mensaje-password");
+
+  if (!actual || !nueva || !confirmar) {
+    mensaje.style.color = "var(--color-error)";
+    mensaje.textContent = "Completa todos los campos.";
     return;
   }
-  await cambiarPassword(nueva);
-  document.getElementById("nueva-password").value = "";
-  mostrarToast("Contraseña actualizada", "exito");
-  renderizarActividad();
+
+  if (nueva.length < 4) {
+    mensaje.style.color = "var(--color-error)";
+    mensaje.textContent =
+      "La nueva contraseña debe tener al menos 4 caracteres.";
+    return;
+  }
+
+  if (nueva !== confirmar) {
+    mensaje.style.color = "var(--color-error)";
+    mensaje.textContent = "Las contraseñas no coinciden.";
+    return;
+  }
+
+  // Verificar contraseña actual
+  const valido = await verificarPassword(actual);
+  if (!valido) {
+    mensaje.style.color = "var(--color-error)";
+    mensaje.textContent = "La contraseña actual es incorrecta.";
+    return;
+  }
+
+  const resultado = await cambiarPassword(nueva);
+  if (resultado) {
+    mensaje.style.color = "var(--color-exito)";
+    mensaje.textContent = "✅ Contraseña actualizada correctamente.";
+    document.getElementById("password-actual").value = "";
+    document.getElementById("nueva-password").value = "";
+    document.getElementById("confirmar-password").value = "";
+    await renderizarActividad();
+  } else {
+    mensaje.style.color = "var(--color-error)";
+    mensaje.textContent = "Error al actualizar la contraseña.";
+  }
 }
 
-/* ---------- Actividad ---------- */
-function renderizarActividad() {
+/* ================= ACTIVIDAD ================= */
+async function renderizarActividad() {
   const lista = document.getElementById("lista-actividad");
-  const registros = obtenerActividad();
+  const registros = await obtenerActividad();
 
-  if (!registros.length) {
+  if (!registros || !registros.length) {
     lista.innerHTML = `<li>Sin actividad todavía.</li>`;
     return;
   }
 
   lista.innerHTML = registros
+    .slice(0, 20)
     .map(
       (r) => `
     <li>
@@ -393,9 +480,9 @@ function renderizarActividad() {
     .join("");
 }
 
-/* ---------- Respaldo (exportar / importar catálogo) ---------- */
-function exportarCatalogoDesdeUI() {
-  const contenido = exportarCatalogo();
+/* ================= RESPALDO ================= */
+async function exportarCatalogoDesdeUI() {
+  const contenido = await exportarCatalogo();
   const blob = new Blob([contenido], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const enlace = document.createElement("a");
@@ -406,7 +493,7 @@ function exportarCatalogoDesdeUI() {
   mostrarToast("Catálogo exportado", "exito");
 }
 
-function importarCatalogoDesdeUI(e) {
+async function importarCatalogoDesdeUI(e) {
   const archivo = e.target.files[0];
   if (!archivo) return;
 
@@ -420,11 +507,11 @@ function importarCatalogoDesdeUI(e) {
   }
 
   const lector = new FileReader();
-  lector.onload = () => {
+  lector.onload = async () => {
     try {
-      importarCatalogo(lector.result);
+      await importarCatalogo(lector.result);
       mostrarToast("Catálogo importado correctamente", "exito");
-      renderizarTodo();
+      await renderizarTodo();
     } catch (error) {
       mostrarToast("No se pudo importar: " + error.message, "error");
     }

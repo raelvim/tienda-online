@@ -190,10 +190,27 @@
             <div class="tarjeta">
               <h3>Cambiar contraseña</h3>
               <div class="campo">
+                <label>Contraseña actual</label>
+                <input
+                  type="password"
+                  id="password-actual"
+                  placeholder="Contraseña actual"
+                />
+              </div>
+              <div class="campo">
+                <label>Nueva contraseña</label>
                 <input
                   type="password"
                   id="nueva-password"
                   placeholder="Nueva contraseña"
+                />
+              </div>
+              <div class="campo">
+                <label>Confirmar nueva contraseña</label>
+                <input
+                  type="password"
+                  id="confirmar-password"
+                  placeholder="Confirmar nueva contraseña"
                 />
               </div>
               <button
@@ -203,6 +220,10 @@
               >
                 Actualizar contraseña
               </button>
+              <p
+                id="mensaje-password"
+                style="font-size: 0.85rem; margin-top: 0.5rem"
+              ></p>
             </div>
           </div>
 
