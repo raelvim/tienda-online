@@ -8,8 +8,8 @@
 function formatearDinero(numero) {
   const valor = Number(numero) || 0;
   const moneda =
-    typeof obtenerConfigMoneda === "function"
-      ? obtenerConfigMoneda()
+    typeof obtenerMonedaCache === "function"
+      ? obtenerMonedaCache()
       : { simbolo: "$", locale: "es-MX" };
   return (
     moneda.simbolo +

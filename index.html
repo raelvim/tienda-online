@@ -25,6 +25,12 @@
       </div>
 
       <div class="encabezado__acciones">
+        <div id="area-usuario">
+          <button class="boton-icono" id="btn-mostrar-login" title="Mi cuenta">
+            <span aria-hidden="true">👤</span>
+            <span class="boton-icono__texto">Iniciar sesión</span>
+          </button>
+        </div>
         <button class="boton-icono" id="btn-abrir-favoritos" title="Favoritos">
           <span aria-hidden="true">❤️</span>
           <span class="boton-icono__texto">Favoritos</span>
@@ -120,6 +126,46 @@
         </button>
       </div>
     </aside>
+
+    <!-- Modal Login/Registro -->
+    <div class="fondo-oscuro" id="fondo-oscuro-login"></div>
+    <div class="modal-auth" id="modal-login" style="display:none;">
+      <div class="modal-auth__contenido">
+        <button class="modal-auth__cerrar" id="btn-cerrar-login">✕</button>
+        <div id="vista-login-cliente">
+          <h2>👤 Iniciar sesión</h2>
+          <div class="campo">
+            <label>Email</label>
+            <input type="email" id="login-email" placeholder="tu@email.com" />
+          </div>
+          <div class="campo">
+            <label>Contraseña</label>
+            <input type="password" id="login-pass" placeholder="Tu contraseña" />
+          </div>
+          <button class="boton boton--primario boton--bloque" id="btn-login-cliente">Entrar</button>
+          <p id="mensaje-login-cliente" style="color:var(--color-error);font-size:0.85rem;margin-top:0.5rem;"></p>
+          <p style="text-align:center;margin-top:1rem;font-size:0.85rem;">¿No tenés cuenta? <a href="#" id="btn-mostrar-registro">Registrate</a></p>
+        </div>
+        <div id="vista-registro-cliente" style="display:none;">
+          <h2>📝 Crear cuenta</h2>
+          <div class="campo">
+            <label>Nombre</label>
+            <input type="text" id="reg-nombre" placeholder="Tu nombre" />
+          </div>
+          <div class="campo">
+            <label>Email</label>
+            <input type="email" id="reg-email" placeholder="tu@email.com" />
+          </div>
+          <div class="campo">
+            <label>Contraseña</label>
+            <input type="password" id="reg-pass" placeholder="Mínimo 4 caracteres" />
+          </div>
+          <button class="boton boton--primario boton--bloque" id="btn-registro-cliente">Crear cuenta</button>
+          <p id="mensaje-registro-cliente" style="color:var(--color-error);font-size:0.85rem;margin-top:0.5rem;"></p>
+          <p style="text-align:center;margin-top:1rem;font-size:0.85rem;">¿Ya tenés cuenta? <a href="#" id="btn-mostrar-login-desde-reg">Iniciar sesión</a></p>
+        </div>
+      </div>
+    </div>
 
     <script src="js/data.js"></script>
     <script src="js/ui.js"></script>

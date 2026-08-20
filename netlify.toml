@@ -1,0 +1,22 @@
+[build]
+  publish = "."
+
+# Redirigir /api/* al backend de Render
+[[redirects]]
+  from = "/api/*"
+  to = "https://tu-backend-en-render.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+# Redirect SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

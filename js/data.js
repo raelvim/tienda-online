@@ -5,7 +5,18 @@
    ========================================================= */
 
 // Configuración de la API
-const API_URL = "http://localhost:5000/api";
+// En producción, auto-detecta el dominio. En desarrollo local, usa localhost:5000.
+const API_URL = window.location.hostname === "localhost"
+  ? "http://localhost:5000/api"
+  : "/api";
+
+// Cache de moneda para acceso síncrono (se actualiza al cargar la tienda)
+let monedaCache = { simbolo: "$", locale: "es-MX", codigo: "MXN" };
+
+// Función síncrona para obtener la moneda cacheada
+function obtenerMonedaCache() {
+  return monedaCache;
+}
 
 // Solo guardamos el token en localStorage (para autenticación)
 const STORAGE_KEYS = {
@@ -424,11 +435,13 @@ async function guardarDireccionLocal(direccion) {
 async function obtenerConfigMoneda() {
   try {
     const respuesta = await fetch(`${API_URL}/config/moneda`);
-    if (!respuesta.ok) return { codigo: "MXN", simbolo: "$", locale: "es-MX" };
-    return await respuesta.json();
+    if (!respuesta.ok) return monedaCache;
+    const config = await respuesta.json();
+    monedaCache = config;
+    return config;
   } catch (error) {
     console.error("Error en obtenerConfigMoneda:", error);
-    return { codigo: "MXN", simbolo: "$", locale: "es-MX" };
+    return monedaCache;
   }
 }
 
@@ -666,5 +679,73 @@ function haySesionAdmin() {
   return (
     sessionStorage.getItem(STORAGE_KEYS.ADMIN_SESION) === "1" &&
     localStorage.getItem(STORAGE_KEYS.TOKEN) !== null
+  );
+}
+
+/* ================= CLIENTE (AUTENTICACIÓN) ================= */
+
+async function registrarCliente(nombre, email, password) {
+  try {
+    const respuesta = await fetch(`${API_URL}/client-auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre, email, password }),
+    });
+
+    const datos = await respuesta.json();
+    if (!respuesta.ok) throw new Error(datos.error || "Error al registrarse");
+
+    localStorage.setItem(STORAGE_KEYS.TOKEN, datos.token);
+    localStorage.setItem(
+      "tienda_usuario",
+      JSON.stringify(datos.usuario),
+    );
+    return { exito: true, usuario: datos.usuario };
+  } catch (error) {
+    console.error("Error en registrarCliente:", error);
+    return { exito: false, error: error.message };
+  }
+}
+
+async function loginCliente(email, password) {
+  try {
+    const respuesta = await fetch(`${API_URL}/client-auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const datos = await respuesta.json();
+    if (!respuesta.ok) throw new Error(datos.error || "Error al iniciar sesión");
+
+    localStorage.setItem(STORAGE_KEYS.TOKEN, datos.token);
+    localStorage.setItem(
+      "tienda_usuario",
+      JSON.stringify(datos.usuario),
+    );
+    return { exito: true, usuario: datos.usuario };
+  } catch (error) {
+    console.error("Error en loginCliente:", error);
+    return { exito: false, error: error.message };
+  }
+}
+
+function logoutCliente() {
+  localStorage.removeItem(STORAGE_KEYS.TOKEN);
+  localStorage.removeItem("tienda_usuario");
+}
+
+function obtenerUsuarioActual() {
+  try {
+    const datos = localStorage.getItem("tienda_usuario");
+    return datos ? JSON.parse(datos) : null;
+  } catch {
+    return null;
+  }
+}
+
+function haySesionCliente() {
+  return (
+    !haySesionAdmin() && localStorage.getItem(STORAGE_KEYS.TOKEN) !== null
   );
 }

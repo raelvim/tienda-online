@@ -25,8 +25,8 @@ router.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { usuarioId: "admin" },
-      process.env.JWT_SECRET || "mi_clave_secreta_12345",
+      { usuarioId: "admin", esAdmin: true },
+      process.env.JWT_SECRET,
       { expiresIn: "7d" },
     );
 

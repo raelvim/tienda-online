@@ -5,11 +5,17 @@ const bcrypt = require("bcryptjs");
 const { conectarDB } = require("./db");
 const Config = require("./models/Config");
 const authRoutes = require("./routes/auth");
+const clientAuthRoutes = require("./routes/clientAuth");
 const productoRoutes = require("./routes/productos");
 const configRoutes = require("./routes/config");
 const actividadRoutes = require("./routes/actividad");
 const carritoRoutes = require("./routes/carrito");
 const favoritosRoutes = require("./routes/favoritos");
+
+if (!process.env.JWT_SECRET) {
+  console.error("❌ Falta JWT_SECRET en las variables de entorno");
+  process.exit(1);
+}
 
 const app = express();
 
@@ -26,6 +32,7 @@ app.use(express.json({ limit: "10mb" }));
 
 // Rutas de la API
 app.use("/api/auth", authRoutes);
+app.use("/api/client-auth", clientAuthRoutes);
 app.use("/api/productos", productoRoutes);
 app.use("/api/config", configRoutes);
 app.use("/api/actividad", actividadRoutes);

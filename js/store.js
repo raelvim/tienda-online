@@ -9,6 +9,12 @@ let textoBusqueda = "";
 let productosGlobales = [];
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // Renderizar estado de sesión
+  renderizarUsuario();
+
+  // Cargar config de moneda (para formatear precios)
+  await obtenerConfigMoneda();
+
   // Cargar productos desde la API
   await cargarProductosIniciales();
 
@@ -31,7 +37,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     .addEventListener("click", abrirCarrito);
   document
     .getElementById("btn-abrir-favoritos")
-    .addEventListener("click", () => cambiarVista("favoritos"));
+    .addEventListener("click", () => {
+      if (!haySesionCliente() && !haySesionAdmin()) {
+        mostrarToast("Iniciá sesión para ver tus favoritos", "error");
+        abrirLogin();
+        return;
+      }
+      cambiarVista("favoritos");
+    });
   document
     .getElementById("btn-cerrar-carrito")
     .addEventListener("click", cerrarCarrito);
@@ -52,6 +65,45 @@ document.addEventListener("DOMContentLoaded", async () => {
     .addEventListener("input", (e) => {
       guardarConfigEntrega({ metodo: "domicilio", direccion: e.target.value });
     });
+
+  // Modal login/registro
+  document
+    .getElementById("btn-mostrar-login")
+    .addEventListener("click", abrirLogin);
+  document
+    .getElementById("btn-cerrar-login")
+    .addEventListener("click", cerrarLogin);
+  document
+    .getElementById("fondo-oscuro-login")
+    .addEventListener("click", cerrarLogin);
+  document
+    .getElementById("btn-login-cliente")
+    .addEventListener("click", hacerLoginCliente);
+  document
+    .getElementById("btn-registro-cliente")
+    .addEventListener("click", hacerRegistroCliente);
+  document
+    .getElementById("btn-mostrar-registro")
+    .addEventListener("click", (e) => {
+      e.preventDefault();
+      document.getElementById("vista-login-cliente").style.display = "none";
+      document.getElementById("vista-registro-cliente").style.display = "block";
+    });
+  document
+    .getElementById("btn-mostrar-login-desde-reg")
+    .addEventListener("click", (e) => {
+      e.preventDefault();
+      document.getElementById("vista-registro-cliente").style.display = "none";
+      document.getElementById("vista-login-cliente").style.display = "block";
+    });
+
+  // Enter en campos de login/registro
+  document.getElementById("login-pass").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") hacerLoginCliente();
+  });
+  document.getElementById("reg-pass").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") hacerRegistroCliente();
+  });
 });
 
 /* ================= CARGAR PRODUCTOS ================= */
@@ -66,15 +118,15 @@ async function cargarProductosIniciales() {
 }
 
 /* ================= CAMBIAR FORMA DE ENTREGA ================= */
-function cambiarFormaEntrega(metodo) {
+async function cambiarFormaEntrega(metodo) {
   const direccion = document.getElementById("input-direccion-envio").value;
-  guardarConfigEntrega({ metodo, direccion });
+  await guardarConfigEntrega({ metodo, direccion });
   aplicarFormaEntregaUI();
-  renderizarCarrito();
+  await renderizarCarrito();
 }
 
-function aplicarFormaEntregaUI() {
-  const config = obtenerConfigEntrega();
+async function aplicarFormaEntregaUI() {
+  const config = await obtenerConfigEntrega();
   const esRetiro = config.metodo === "retiro";
 
   document.getElementById("entrega-domicilio").checked = !esRetiro;
@@ -87,7 +139,7 @@ function aplicarFormaEntregaUI() {
     : "flex";
 
   const textoLocal = document.getElementById("texto-direccion-local");
-  const direccionLocal = obtenerDireccionLocal();
+  const direccionLocal = await obtenerDireccionLocal();
   if (esRetiro) {
     textoLocal.style.display = "block";
     textoLocal.textContent = direccionLocal
@@ -205,9 +257,9 @@ function imagenMarcador() {
 }
 
 /* ================= CARRITO ================= */
-function abrirCarrito() {
-  aplicarFormaEntregaUI();
-  renderizarCarrito();
+async function abrirCarrito() {
+  await aplicarFormaEntregaUI();
+  await renderizarCarrito();
   document
     .getElementById("panel-carrito")
     .classList.add("panel-lateral--abierto");
@@ -225,9 +277,9 @@ function cerrarCarrito() {
     .classList.remove("fondo-oscuro--visible");
 }
 
-function renderizarCarrito() {
+async function renderizarCarrito() {
   const lista = document.getElementById("lista-carrito");
-  const items = obtenerCarritoDetallado();
+  const items = await obtenerCarritoDetallado();
 
   if (!items || !items.length) {
     lista.innerHTML = `
@@ -319,14 +371,14 @@ function actualizarContadores() {
 }
 
 /* ================= FINALIZAR COMPRA ================= */
-function finalizarCompra() {
-  const items = obtenerCarritoDetallado();
+async function finalizarCompra() {
+  const items = await obtenerCarritoDetallado();
   if (!items || !items.length) {
     mostrarToast("El carrito está vacío", "error");
     return;
   }
 
-  const config = obtenerConfigEntrega();
+  const config = await obtenerConfigEntrega();
   const esRetiro = config.metodo === "retiro";
   if (!esRetiro && !config.direccion.trim()) {
     mostrarToast("Ingresá una dirección de envío para continuar", "error");
@@ -336,7 +388,7 @@ function finalizarCompra() {
 
   const subtotal = items.reduce((acc, i) => acc + i.subtotal, 0);
   const cantidadTotal = items.reduce((acc, i) => acc + i.cantidad, 0);
-  const envio = esRetiro ? 0 : calcularCostoEnvio(cantidadTotal);
+  const envio = esRetiro ? 0 : await calcularCostoEnvio(cantidadTotal);
   const total = subtotal + envio;
   const entregaTexto = esRetiro
     ? "retiro en el local"
@@ -350,4 +402,96 @@ function finalizarCompra() {
   actualizarContadores();
   mostrarToast("¡Gracias por tu compra! 🎉", "exito");
   cerrarCarrito();
+}
+
+/* ================= AUTH DE CLIENTES ================= */
+
+function abrirLogin() {
+  document.getElementById("modal-login").style.display = "block";
+  document.getElementById("fondo-oscuro-login").classList.add("fondo-oscuro--visible");
+  document.getElementById("vista-login-cliente").style.display = "block";
+  document.getElementById("vista-registro-cliente").style.display = "none";
+  document.getElementById("mensaje-login-cliente").textContent = "";
+  document.getElementById("mensaje-registro-cliente").textContent = "";
+}
+
+function cerrarLogin() {
+  document.getElementById("modal-login").style.display = "none";
+  document.getElementById("fondo-oscuro-login").classList.remove("fondo-oscuro--visible");
+}
+
+async function hacerLoginCliente() {
+  const email = document.getElementById("login-email").value.trim();
+  const pass = document.getElementById("login-pass").value;
+  const msg = document.getElementById("mensaje-login-cliente");
+
+  if (!email || !pass) {
+    msg.textContent = "Completá todos los campos.";
+    return;
+  }
+
+  const resultado = await loginCliente(email, pass);
+  if (resultado.exito) {
+    msg.textContent = "";
+    cerrarLogin();
+    renderizarUsuario();
+    mostrarToast(`¡Hola, ${resultado.usuario.nombre}! 👋`, "exito");
+  } else {
+    msg.textContent = resultado.error || "Credenciales incorrectas.";
+  }
+}
+
+async function hacerRegistroCliente() {
+  const nombre = document.getElementById("reg-nombre").value.trim();
+  const email = document.getElementById("reg-email").value.trim();
+  const pass = document.getElementById("reg-pass").value;
+  const msg = document.getElementById("mensaje-registro-cliente");
+
+  if (!nombre || !email || !pass) {
+    msg.textContent = "Completá todos los campos.";
+    return;
+  }
+
+  const resultado = await registrarCliente(nombre, email, pass);
+  if (resultado.exito) {
+    msg.textContent = "";
+    cerrarLogin();
+    renderizarUsuario();
+    mostrarToast(`¡Bienvenido/a, ${resultado.usuario.nombre}! 🎉`, "exito");
+  } else {
+    msg.textContent = resultado.error || "Error al registrarse.";
+  }
+}
+
+function renderizarUsuario() {
+  const area = document.getElementById("area-usuario");
+  const usuario = obtenerUsuarioActual();
+
+  if (usuario) {
+    area.innerHTML = `
+      <button class="boton-icono" id="btn-mostrar-login" title="Mi cuenta">
+        <span aria-hidden="true">👤</span>
+        <span class="boton-icono__texto">${escaparHtml(usuario.nombre)}</span>
+      </button>
+      <button class="boton-icono" id="btn-logout" title="Cerrar sesión" style="font-size:0.8rem;">
+        🚪 Salir
+      </button>
+    `;
+    document.getElementById("btn-mostrar-login").addEventListener("click", abrirLogin);
+    document.getElementById("btn-logout").addEventListener("click", () => {
+      logoutCliente();
+      renderizarUsuario();
+      actualizarContadores();
+      renderizarProductos();
+      mostrarToast("Sesión cerrada");
+    });
+  } else {
+    area.innerHTML = `
+      <button class="boton-icono" id="btn-mostrar-login" title="Mi cuenta">
+        <span aria-hidden="true">👤</span>
+        <span class="boton-icono__texto">Iniciar sesión</span>
+      </button>
+    `;
+    document.getElementById("btn-mostrar-login").addEventListener("click", abrirLogin);
+  }
 }

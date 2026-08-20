@@ -12,14 +12,21 @@ function verificarToken(req, res, next) {
   try {
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || "mi_clave_secreta_12345",
+      process.env.JWT_SECRET,
     );
-    req.usuarioId = decoded.usuarioId || "admin";
-    req.esAdmin = true;
+    req.usuarioId = decoded.usuarioId;
+    req.esAdmin = decoded.esAdmin === true;
     next();
   } catch (error) {
     return res.status(401).json({ error: "Token inválido o expirado" });
   }
 }
 
-module.exports = { verificarToken };
+function soloAdmin(req, res, next) {
+  if (!req.esAdmin) {
+    return res.status(403).json({ error: "Acceso solo para administradores" });
+  }
+  next();
+}
+
+module.exports = { verificarToken, soloAdmin };

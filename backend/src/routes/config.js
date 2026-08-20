@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { verificarToken } = require("../middleware/auth");
+const { verificarToken, soloAdmin } = require("../middleware/auth");
 const Config = require("../models/Config");
 
 // Obtener toda la configuración (pública)
@@ -35,7 +35,7 @@ router.get("/envio", async (req, res) => {
 });
 
 // Guardar configuración de envío
-router.put("/envio", verificarToken, async (req, res) => {
+router.put("/envio", verificarToken, soloAdmin, async (req, res) => {
   try {
     const { tramos } = req.body;
 
@@ -74,7 +74,7 @@ router.get("/direccion-local", async (req, res) => {
 });
 
 // Guardar dirección local
-router.put("/direccion-local", verificarToken, async (req, res) => {
+router.put("/direccion-local", verificarToken, soloAdmin, async (req, res) => {
   try {
     const { direccion } = req.body;
 
@@ -105,7 +105,7 @@ router.get("/moneda", async (req, res) => {
 });
 
 // Guardar configuración de moneda
-router.put("/moneda", verificarToken, async (req, res) => {
+router.put("/moneda", verificarToken, soloAdmin, async (req, res) => {
   try {
     const { codigo, simbolo, locale } = req.body;
 

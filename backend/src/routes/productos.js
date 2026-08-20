@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const Producto = require("../models/Producto");
-const { verificarToken } = require("../middleware/auth");
+const { verificarToken, soloAdmin } = require("../middleware/auth");
+const { upload } = require("../utils/cloudinary");
 
 // Obtener todos los productos
 router.get("/", async (req, res) => {
@@ -27,12 +28,21 @@ router.get("/:id", async (req, res) => {
 });
 
 // Crear producto (admin)
-router.post("/", verificarToken, async (req, res) => {
+router.post("/", verificarToken, soloAdmin, upload.single("imagen"), async (req, res) => {
   try {
-    const { nombre, descripcion, precio, formaEnvio, imagen } = req.body;
+    const { nombre, descripcion, precio, formaEnvio, imagen: imagenBase64 } = req.body;
 
     if (!nombre || !descripcion || precio === undefined) {
       return res.status(400).json({ error: "Faltan campos requeridos" });
+    }
+
+    // Si se subió archivo via multer, usar URL de Cloudinary
+    // Si se envió base64 en body, usarlo como fallback
+    let imagenUrl = "";
+    if (req.file) {
+      imagenUrl = req.file.path;
+    } else if (imagenBase64) {
+      imagenUrl = imagenBase64;
     }
 
     const producto = new Producto({
@@ -40,7 +50,7 @@ router.post("/", verificarToken, async (req, res) => {
       descripcion,
       precio: Number(precio),
       formaEnvio: formaEnvio || "Envío estándar",
-      imagen: imagen || "",
+      imagen: imagenUrl,
     });
 
     await producto.save();
@@ -51,9 +61,9 @@ router.post("/", verificarToken, async (req, res) => {
 });
 
 // Actualizar producto (admin)
-router.put("/:id", verificarToken, async (req, res) => {
+router.put("/:id", verificarToken, soloAdmin, upload.single("imagen"), async (req, res) => {
   try {
-    const { nombre, descripcion, precio, formaEnvio, imagen } = req.body;
+    const { nombre, descripcion, precio, formaEnvio, imagen: imagenBase64 } = req.body;
 
     const producto = await Producto.findById(req.params.id);
     if (!producto) {
@@ -64,7 +74,11 @@ router.put("/:id", verificarToken, async (req, res) => {
     if (descripcion !== undefined) producto.descripcion = descripcion;
     if (precio !== undefined) producto.precio = Number(precio);
     if (formaEnvio !== undefined) producto.formaEnvio = formaEnvio;
-    if (imagen !== undefined) producto.imagen = imagen;
+    if (req.file) {
+      producto.imagen = req.file.path;
+    } else if (imagenBase64 !== undefined) {
+      producto.imagen = imagenBase64;
+    }
 
     await producto.save();
     res.json(producto);
@@ -74,7 +88,7 @@ router.put("/:id", verificarToken, async (req, res) => {
 });
 
 // Eliminar producto (admin)
-router.delete("/:id", verificarToken, async (req, res) => {
+router.delete("/:id", verificarToken, soloAdmin, async (req, res) => {
   try {
     const producto = await Producto.findByIdAndDelete(req.params.id);
     if (!producto) {

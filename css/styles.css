@@ -871,3 +871,59 @@ h3,
     grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   }
 }
+
+/* ---------- Modal Auth (Login / Registro) ---------- */
+.modal-auth {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal-auth__contenido {
+  background: var(--color-superficie);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  padding: 2rem;
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+}
+
+.modal-auth__contenido h2 {
+  margin-top: 0;
+  margin-bottom: 1.2rem;
+  text-align: center;
+}
+
+.modal-auth__cerrar {
+  position: absolute;
+  top: 0.8rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  color: var(--color-texto-suave);
+  padding: 0.2rem 0.5rem;
+}
+
+.modal-auth__cerrar:hover {
+  color: var(--color-texto);
+}
+
+.modal-auth__contenido a {
+  color: var(--color-primario);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.modal-auth__contenido a:hover {
+  text-decoration: underline;
+}

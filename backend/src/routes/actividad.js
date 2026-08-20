@@ -1,10 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const { verificarToken } = require("../middleware/auth");
+const { verificarToken, soloAdmin } = require("../middleware/auth");
 const Actividad = require("../models/Actividad");
 
 // Obtener actividad (admin) - últimos 50 registros
-router.get("/", verificarToken, async (req, res) => {
+router.get("/", verificarToken, soloAdmin, async (req, res) => {
   try {
     const registros = await Actividad.find().sort({ fecha: -1 }).limit(50);
     res.json(registros);
@@ -15,7 +15,7 @@ router.get("/", verificarToken, async (req, res) => {
 });
 
 // Crear registro de actividad (admin)
-router.post("/", verificarToken, async (req, res) => {
+router.post("/", verificarToken, soloAdmin, async (req, res) => {
   try {
     const { mensaje } = req.body;
 

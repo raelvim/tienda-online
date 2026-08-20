@@ -338,9 +338,9 @@ async function renderizarTramos() {
   document.getElementById("direccion-local").value = direccion || "";
 }
 
-function agregarFilaTramo(tramo = { desde: 1, costo: 0 }) {
+async function agregarFilaTramo(tramo = { desde: 1, costo: 0 }) {
   const contenedor = document.getElementById("lista-tramos");
-  const moneda = obtenerConfigMoneda(); // Esta aún es sincrónica
+  const moneda = await obtenerConfigMoneda();
   const simbolo = moneda.simbolo || "$";
   const fila = document.createElement("div");
   fila.className = "fila-tramo";
