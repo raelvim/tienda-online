@@ -8,6 +8,12 @@
   status = 200
   force = true
 
+# Redirect SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
 # SPA fallback
 [[redirects]]
   from = "/*"
