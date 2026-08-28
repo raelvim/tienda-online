@@ -1,0 +1,14 @@
+{
+  "name": "mi-tienda-online",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tienda online completa con panel de administración, carrito de compras, favoritos y gestión de envíos.",
+  "scripts": {
+    "install:all": "cd backend && npm install",
+    "dev": "cd backend && npm run dev",
+    "start": "cd backend && npm start",
+    "health": "curl -s http://localhost:5000/api/health || curl -s http://localhost:4000/api/health"
+  },
+  "keywords": ["tienda-online", "e-commerce", "express", "mongodb"],
+  "license": "MIT"
+}

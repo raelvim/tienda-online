@@ -4,16 +4,17 @@
 # Redirigir /api/* al backend de Render
 [[redirects]]
   from = "/api/*"
-  to = "https://tu-backend-en-render.onrender.com/api/:splat"
+  to = "https://tienda-online-josy.onrender.com/api/:splat"
   status = 200
   force = true
 
-# Redirect SPA fallback
+# SPA fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
+# Headers de seguridad
 [[headers]]
   for = "/*"
   [headers.values]

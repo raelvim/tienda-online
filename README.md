@@ -59,31 +59,55 @@ npm run dev
 # Frontend (usar Live Server de VS Code o similar en puerto 5500)
 ```
 
-## Despliegue
+## Despliegue (paso a paso)
 
-### Backend (Render)
-1. Crear cuenta en [render.com](https://render.com)
-2. Conectar tu repositorio GitHub
-3. Crear un "Web Service" apuntando a la carpeta `backend`
-4. Configurar las variables de entorno en el dashboard de Render
-5. El backend se desplegará en `https://tu-backend.onrender.com`
-
-### Frontend (Netlify)
-1. Crear cuenta en [netlify.com](https://netlify.com)
-2. Conectar tu repositorio GitHub
-3. Editar `netlify.toml` → reemplazar `tu-backend-en-render.onrender.com` con la URL real de tu backend
-4. Desplegar
-
-### MongoDB Atlas (gratis)
+### 1. MongoDB Atlas (gratis)
 1. Crear cuenta en [mongodb.com/atlas](https://mongodb.com/atlas)
 2. Crear un cluster gratuito (M0)
-3. Crear un usuario de base de datos
-4. Whitelist: `0.0.0.0/0` (acceso desde cualquier IP)
-5. Copiar la URI de conexión a `MONGODB_URI`
+3. Crear un usuario de base de datos (Database Access → Add New Database User)
+4. Network Access → Add IP Address → `0.0.0.0/0` (acceso desde cualquier IP)
+5. Copiar la URI de conexión (Connect → Connect your application) → es la `MONGODB_URI`
 
-### Cloudinary (gratis)
+### 2. Cloudinary (gratis)
 1. Crear cuenta en [cloudinary.com](https://cloudinary.com)
-2. Copiar Cloud Name, API Key y API Secret al `.env`
+2. En el dashboard copiar: **Cloud Name**, **API Key** y **API Secret**
+
+### 3. Backend en Render
+1. Crear cuenta en [render.com](https://render.com)
+2. New → Web Service → Conectar tu repositorio GitHub
+3. Configuración:
+   - **Root Directory**: `backend`
+   - **Build Command**: `npm install`
+   - **Start Command**: `node src/server.js`
+4. En la pestaña **Environment**, agregar las variables de entorno:
+   - `MONGODB_URI` = tu URI de MongoDB Atlas
+   - `JWT_SECRET` = cualquier cadena larga y aleatoria
+   - `ADMIN_PASSWORD` = contraseña para el admin
+   - `CORS_ORIGIN` = `https://tu-dominio.netlify.app` (la URL que tendra tu frontend)
+   - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+5. Deploy → el backend estará en `https://tu-backend.onrender.com`
+6. Verificar: visitar `https://tu-backend.onrender.com/api/health` → debe devolver `{"ok":true}`
+
+### 4. Frontend en Netlify
+1. Crear cuenta en [netlify.com](https://netlify.com)
+2. New site from Git → Conectar tu repositorio GitHub
+3. **Antes del deploy**, editar `netlify.toml`:
+   ```toml
+   [[redirects]]
+     from = "/api/*"
+     to = "https://TU-BACKEND-EN-RENDER.onrender.com/api/:splat"
+     status = 200
+     force = true
+   ```
+   Reemplazar `TU-BACKEND-EN-RENDER` con la URL real de tu backend en Render.
+4. Deploy → el frontend estará en `https://tu-tienda.netlify.app`
+5. Volver al dashboard de Render y actualizar `CORS_ORIGIN` con la URL real de Netlify
+
+### Verificación final
+- Visitar la tienda → debe mostrar "Todavía no hay productos"
+- Ir a `admin.html` → login con la contraseña que definiste en `ADMIN_PASSWORD`
+- Agregar un producto → la imagen debe subirse a Cloudinary
+- Registrar un cliente → probar carrito y favoritos
 
 ## Funcionalidades
 

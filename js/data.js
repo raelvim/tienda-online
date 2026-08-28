@@ -66,6 +66,8 @@ async function obtenerProductoPorId(id) {
 }
 
 // Guardar producto (crear o actualizar)
+// Si producto.imagenArchivo es un File, se sube via multipart a Cloudinary.
+// Si es base64 string (legacy), se envía en el body JSON como fallback.
 async function guardarProducto(producto) {
   try {
     const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
@@ -79,6 +81,30 @@ async function guardarProducto(producto) {
       method = "PUT";
     }
 
+    // Usar FormData si hay archivo para subir a Cloudinary via multer
+    if (producto.imagenArchivo && producto.imagenArchivo instanceof File) {
+      const formData = new FormData();
+      formData.append("nombre", producto.nombre);
+      formData.append("descripcion", producto.descripcion || "");
+      formData.append("precio", Number(producto.precio));
+      formData.append("formaEnvio", producto.formaEnvio || "Envío estándar");
+      formData.append("imagen", producto.imagenArchivo);
+
+      const respuesta = await fetch(url, {
+        method: method,
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!respuesta.ok) throw new Error("Error al guardar producto");
+      const resultado = await respuesta.json();
+      await registrarActividad(
+        `Producto ${producto._id ? "editado" : "agregado"}: "${producto.nombre}"`,
+      );
+      return resultado;
+    }
+
+    // Fallback: JSON body (para base64 legacy o sin imagen)
     const respuesta = await fetch(url, {
       method: method,
       headers: {

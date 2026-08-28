@@ -173,9 +173,12 @@ async function renderizarEstadisticas() {
 }
 
 /* ================= PRODUCTOS ================= */
+let archivoImagenSeleccionado = null;
+
 function previsualizarImagen(e) {
   const archivo = e.target.files[0];
   if (!archivo) return;
+  archivoImagenSeleccionado = archivo;
   const lector = new FileReader();
   lector.onload = () => {
     imagenSeleccionada = lector.result;
@@ -210,7 +213,14 @@ async function guardarProductoDesdeForm(e) {
   };
 
   if (id) datos._id = id;
-  if (imagenSeleccionada) datos.imagen = imagenSeleccionada;
+
+  // Subir archivo a Cloudinary via multipart si se seleccionó una imagen nueva
+  if (archivoImagenSeleccionado && archivoImagenSeleccionado instanceof File) {
+    datos.imagenArchivo = archivoImagenSeleccionado;
+  } else if (imagenSeleccionada) {
+    // Imagen existente (base64) del producto en edición
+    datos.imagen = imagenSeleccionada;
+  }
 
   const resultado = await guardarProducto(datos);
   if (resultado) {
@@ -230,6 +240,7 @@ function cancelarEdicion() {
   document.getElementById("btn-cancelar-edicion").style.display = "none";
   document.getElementById("preview-imagen").style.display = "none";
   imagenSeleccionada = "";
+  archivoImagenSeleccionado = null;
   productoEditando = null;
 }
 
